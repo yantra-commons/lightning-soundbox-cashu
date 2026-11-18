@@ -1,0 +1,20 @@
+@using BTCPayServer.Abstractions.Contracts
+@using BTCPayServer.Abstractions.Extensions
+@inject IScopeProvider ScopeProvider
+@{
+    var storeId = ScopeProvider.GetCurrentStoreId();
+}
+@if (!string.IsNullOrEmpty(storeId))
+{
+    <li class="nav-item">
+        <a asp-controller="SoundboxCashu" asp-action="Index" asp-route-storeId="@storeId"
+           class="nav-link @ViewData.ActivePageClass("SoundboxCashu")">
+            <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; margin-right: 6px;" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M9 9.5c0-1 1.3-1.8 3-1.8s3 .8 3 1.8M9 14.5c0 1 1.3 1.8 3 1.8s3-.8 3-1.8M12 6v12"></path>
+            </svg>
+            <span>Soundbox Cashu</span>
+        </a>
+    </li>
+}

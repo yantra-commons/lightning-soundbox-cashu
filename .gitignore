@@ -1,0 +1,23 @@
+# BTCPay Server source, cloned for building the plugin (see README)
+plugin/btcpayserver/
+
+# .NET build output
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Built plugin packages
+dist/
+*.btcpay
+
+# Regtest stack: staged plugin builds
+e2e/plugins/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

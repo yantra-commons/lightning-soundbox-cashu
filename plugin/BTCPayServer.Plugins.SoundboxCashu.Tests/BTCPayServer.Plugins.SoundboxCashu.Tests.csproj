@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+      Tests for the plugin's Cashu protocol layer.
+
+      Deliberately does NOT reference the plugin project: that would drag in
+      the whole BTCPay Server build. The Cashu code is written to depend only
+      on NBitcoin.Secp256k1 and the BCL, so its source files are compiled in
+      directly and the suite runs in seconds with no BTCPay checkout at all.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>12</LangVersion>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <!-- Lets the suite run on a machine that only has a newer runtime. -->
+        <RollForward>Major</RollForward>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\BTCPayServer.Plugins.SoundboxCashu\Cashu\*.cs" Link="Cashu\%(Filename)%(Extension)" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="NBitcoin.Secp256k1" Version="3.1.6" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+        <PackageReference Include="xunit" Version="2.9.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    </ItemGroup>
+</Project>

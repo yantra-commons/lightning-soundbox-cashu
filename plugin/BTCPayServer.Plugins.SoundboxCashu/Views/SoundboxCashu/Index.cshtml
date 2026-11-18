@@ -1,0 +1,245 @@
+@using BTCPayServer.Abstractions.Extensions
+@using BTCPayServer.Plugins.SoundboxCashu.Data
+@using QRCoder
+@model SoundboxCashuViewModel
+@{
+    ViewData["Title"] = "Soundbox Cashu";
+    Layout = "_Layout";
+    ViewData.SetActivePage("SoundboxCashu");
+
+    string QrSvg(string content)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(content, QRCodeGenerator.ECCLevel.L);
+        return new SvgQRCode(data).GetGraphic(4, "#000000", "#ffffff", true);
+    }
+
+    string StateBadge(CashuOperation op) => op.State switch
+    {
+        CashuOperationState.Settled => "success",
+        CashuOperationState.Exported or CashuOperationState.SweptToToken => "info",
+        CashuOperationState.Failed => "danger",
+        CashuOperationState.Received when op.LastError is not null => "warning",
+        _ => "secondary"
+    };
+
+    string StateText(CashuOperation op) => op.State switch
+    {
+        CashuOperationState.Swapping => "Confirming with mint",
+        CashuOperationState.Received => op.LastError is null ? "Received, settling" : "Received, settlement retrying",
+        CashuOperationState.Settling => "Paying to Lightning",
+        CashuOperationState.Settled => "Settled to Lightning",
+        CashuOperationState.Failed => "Rejected",
+        CashuOperationState.Exported => "Exported as token",
+        CashuOperationState.SweptToToken => "Included in export",
+        _ => op.State.ToString()
+    };
+}
+
+<div class="sticky-header-setup"></div>
+<h2 class="mb-4">Soundbox Cashu</h2>
+
+@if (TempData["SuccessMessage"] is string ok)
+{
+    <div class="alert alert-success">@ok</div>
+}
+@if (TempData["ErrorMessage"] is string err)
+{
+    <div class="alert alert-danger">@err</div>
+}
+
+@if (Model.ExportedToken is { } exported)
+{
+    <div class="card mb-4 border-warning">
+        <div class="card-header">Exported ecash token</div>
+        <div class="card-body">
+            <p class="small mb-2">This token <strong>is</strong> the money. Paste it into your own Cashu wallet
+                (for example cashu.me) to claim it.</p>
+            <div class="input-group">
+                <input type="text" class="form-control font-monospace" readonly value="@exported" id="exportedToken" />
+                <button class="btn btn-outline-secondary" type="button" data-copy-target="exportedToken">Copy</button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">How it works</h5></div>
+    <div class="card-body small">
+        <ol class="mb-0 ps-3">
+            <li>Your Soundbox shows a <strong>Cashu payment request</strong> QR. The customer scans it with a
+                Cashu wallet and enters an amount.</li>
+            <li>Their wallet sends ecash straight to this server. It is redeemed at <em>your</em> chosen mint
+                immediately, so it cannot be double-spent.</li>
+            <li>The mint then pays an ordinary Lightning invoice on this store. Your sats land on your own
+                Lightning node, and the Soundbox announces the payment like any other.</li>
+        </ol>
+        <div class="mt-2 text-muted">Ecash is only ever held for the few seconds between those steps. If settlement
+            fails (for example your node is offline), it is held here and retried automatically.</div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Settings</h5></div>
+    <div class="card-body">
+        <form asp-action="SaveSettings" asp-route-storeId="@Model.StoreId" method="post">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" name="enabled" value="true" id="enabled" checked="@Model.Enabled" />
+                <label class="form-check-label" for="enabled">Accept Cashu ecash</label>
+            </div>
+            <div class="mb-3" style="max-width:36rem">
+                <label class="form-label" for="mintUrl">Mint URL</label>
+                <input class="form-control" name="mintUrl" id="mintUrl" value="@Model.MintUrl"
+                       placeholder="https://mint.example.com" />
+                <div class="form-text">
+                    The only mint this store accepts ecash from. Choose one you trust: the customer's ecash is
+                    redeemed there, and that mint makes the Lightning payment to you.
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+@if (Model.PaymentRequest is { } creq)
+{
+    var tooLong = System.Text.Encoding.UTF8.GetByteCount(creq) > SoundboxCashuViewModel.SoundboxComfortableQrBytes;
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Payment request for your Soundbox</h5></div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-auto text-center">
+                    <div class="d-inline-block p-2 bg-white rounded border" style="line-height:0">
+                        @Html.Raw(QrSvg(creq))
+                    </div>
+                </div>
+                <div class="col-md">
+                    <ol class="small ps-3">
+                        <li>Copy the payment request.</li>
+                        <li>Go to <strong>Lightning Soundbox</strong>, find your device, and paste it into its
+                            <strong>payment code</strong> field. Save.</li>
+                        <li>The box now shows this QR all day. Every ecash payment is announced out loud.</li>
+                    </ol>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control font-monospace" readonly value="@creq" id="creq" />
+                        <button class="btn btn-outline-secondary" type="button" data-copy-target="creq">Copy</button>
+                    </div>
+                    <div class="form-text">
+                        @creq.Length characters. Wallets POST to <code>@Model.PayEndpoint</code>.
+                    </div>
+                    @if (tooLong)
+                    {
+                        <div class="alert alert-warning small mt-2 mb-0">
+                            This request is longer than the Soundbox screen draws comfortably. A shorter server
+                            hostname or mint URL will make the on-screen QR easier to scan.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Held ecash</h5>
+        <form asp-action="SettleNow" asp-route-storeId="@Model.StoreId" method="post">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Retry settlement now</button>
+        </form>
+    </div>
+    @if (Model.Balances.Count == 0)
+    {
+        <div class="card-body text-muted small">Nothing held. Received ecash is normally settled to Lightning within seconds.</div>
+    }
+    else
+    {
+        <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light"><tr><th>Mint</th><th class="text-end">Spendable</th><th class="text-end">Paying out</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var b in Model.Balances)
+            {
+                <tr>
+                    <td class="font-monospace small">@b.MintUrl</td>
+                    <td class="text-end">@b.Spendable.ToString("N0") sat</td>
+                    <td class="text-end">@b.InFlight.ToString("N0") sat</td>
+                    <td class="text-end">
+                        @if (b.Spendable > 0)
+                        {
+                            <form asp-action="Export" asp-route-storeId="@Model.StoreId" method="post" class="d-inline"
+                                  onsubmit="return confirm('Export all spendable ecash at this mint as a token? It stops being settled to Lightning.')">
+                                <input type="hidden" name="mintUrl" value="@b.MintUrl" />
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Export as token</button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div class="card-body small text-muted pt-2">
+            A small balance here is normal: it is change from Lightning fee reserves, and it is used to cover the
+            fee reserve on the next payment so customers' payments settle in full.
+        </div>
+    }
+</div>
+
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Activity</h5></div>
+    @if (Model.Operations.Count == 0)
+    {
+        <div class="card-body text-muted small">No Cashu payments yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                <tr><th>Time</th><th>Status</th><th class="text-end">Ecash</th><th class="text-end">Mint fee</th><th class="text-end">Settled</th><th>Invoice</th><th>Detail</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var op in Model.Operations)
+                {
+                    <tr>
+                        <td class="small text-nowrap text-muted">@op.CreatedAt.LocalDateTime.ToString("MMM d, HH:mm:ss")</td>
+                        <td><span class="badge bg-@StateBadge(op)">@StateText(op)</span></td>
+                        <td class="text-end small">@op.Amount.ToString("N0")</td>
+                        <td class="text-end small">@(op.Kind == CashuOperationKind.Receive ? op.ReceiveFee.ToString("N0") : "")</td>
+                        <td class="text-end small">@(op.State == CashuOperationState.Settled ? op.SettledAmount?.ToString("N0") : "")</td>
+                        <td class="small">
+                            @if (op.InvoiceId is { } invoiceId)
+                            {
+                                <a href="@Url.Content($"~/invoices/{invoiceId}")" class="font-monospace">@(invoiceId.Length > 8 ? invoiceId[..8] + "…" : invoiceId)</a>
+                            }
+                        </td>
+                        <td class="small text-muted">
+                            @if (op.Token is { } token)
+                            {
+                                <input type="text" class="form-control form-control-sm font-monospace" readonly value="@token" />
+                            }
+                            else
+                            {
+                                @op.LastError
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section PageFootContent {
+    <script>
+        document.querySelectorAll('[data-copy-target]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var el = document.getElementById(btn.dataset.copyTarget);
+                navigator.clipboard.writeText(el.value).then(function () {
+                    var orig = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function () { btn.textContent = orig; }, 2000);
+                });
+            });
+        });
+    </script>
+}

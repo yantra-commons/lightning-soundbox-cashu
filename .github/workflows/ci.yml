@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  protocol-tests:
+    name: Cashu protocol tests (spec vectors)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # Live (public test mint) and E2E (regtest docker stack) tests are
+      # excluded: they need the network or a running stack. See README.
+      - run: dotnet test plugin/BTCPayServer.Plugins.SoundboxCashu.Tests --filter "Category!=Live&Category!=E2E"
+
+  plugin:
+    name: Build BTCPay plugin
+    runs-on: ubuntu-latest
+    env:
+      # Same ceiling as the Lightning Soundbox plugin: net8.0 can only
+      # reference BTCPay <= v2.3.6. The built plugin is verified to load and
+      # run on BTCPay 2.4.7 by the E2E suite.
+      BTCPAY_TAG: v2.3.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: git clone --branch "$BTCPAY_TAG" --depth 1 https://github.com/btcpayserver/btcpayserver plugin/btcpayserver
+      - run: dotnet build plugin/BTCPayServer.Plugins.SoundboxCashu/BTCPayServer.Plugins.SoundboxCashu.csproj -c Release
